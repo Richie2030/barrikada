@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -20,6 +21,9 @@ def test_public_sdk_exports_pipeline():
 def test_ensure_runtime_artifacts_errors_when_auto_download_disabled(monkeypatch, tmp_path):
     monkeypatch.setenv("BARRIKADA_ARTIFACTS_DIR", str(tmp_path / "artifacts"))
     monkeypatch.setenv("BARRIKADA_CORE_MODELS_DIR", str(tmp_path / "core-models"))
+    # Mask the home-dir bundle fallback too (~/.barrikade/bundle): a populated
+    # local bundle otherwise satisfies the lookup and the error never raises.
+    monkeypatch.setenv("BARRIKADA_BUNDLE_DIR", str(tmp_path / "bundle"))
 
     with pytest.raises(ArtifactDownloadError, match="download-artifacts"):
         ensure_runtime_artifacts(auto_download=False)
@@ -59,9 +63,11 @@ def test_download_runtime_artifacts_fetches_missing_layers(monkeypatch, tmp_path
         ("test-bucket", "layer_d"),
         ("test-bucket", "layer_e"),
     ]
-    assert any(path.endswith("layer_c/artifact.bin") for _, _, path in downloaded_files)
-    assert any(path.endswith("layer_d/artifact.bin") for _, _, path in downloaded_files)
-    assert any(path.endswith("layer_e/artifact.bin") for _, _, path in downloaded_files)
+    # Compare separator-agnostically: Windows paths come back with backslashes.
+    downloaded_paths = [Path(path).as_posix() for _, _, path in downloaded_files]
+    assert any(path.endswith("layer_c/artifact.bin") for path in downloaded_paths)
+    assert any(path.endswith("layer_d/artifact.bin") for path in downloaded_paths)
+    assert any(path.endswith("layer_e/artifact.bin") for path in downloaded_paths)
 
 
 def test_cli_download_artifacts_invokes_downloader(monkeypatch, capsys):

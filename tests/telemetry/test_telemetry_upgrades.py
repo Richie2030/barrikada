@@ -116,13 +116,14 @@ def test_telemetry_empty_payload_metrics(tmp_path):
 @pytest.mark.telemetry
 def test_telemetry_write_failure_graceful(tmp_path, caplog):
     custom_settings = Settings()
-    # Point to a directory that cannot be created or written to
-    invalid_dir = tmp_path / "readonly_dir"
-    invalid_dir.mkdir()
-    # Make directory read-only
-    invalid_dir.chmod(0o400)
-    
-    log_file = invalid_dir / "subdir" / "telemetry.jsonl"
+    # Use a regular file as a path component: creating "subdir" beneath it
+    # fails on every platform. (The previous chmod(0o400) approach was a no-op
+    # on Windows, where POSIX directory permissions don't apply, so the write
+    # succeeded and no warning was ever logged.)
+    not_a_dir = tmp_path / "not_a_dir"
+    not_a_dir.write_text("occupied")
+
+    log_file = not_a_dir / "subdir" / "telemetry.jsonl"
     custom_settings.telemetry_log_path = str(log_file)
 
     engine = TelemetryEngine(settings=custom_settings)
@@ -130,9 +131,6 @@ def test_telemetry_write_failure_graceful(tmp_path, caplog):
     # Ensure no exception is raised and a warning is logged
     with caplog.at_level(logging.WARNING, logger="barrikade.telemetry"):
         engine.emit(event_type="test_graceful")
-
-    # Clean up chmod so pytest can delete tmp_path
-    invalid_dir.chmod(0o700)
 
     # Check that a warning was indeed logged
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
